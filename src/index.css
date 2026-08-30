@@ -1,0 +1,287 @@
+:root {
+  color-scheme: dark;
+  --bg: #12151c;
+  --panel: #1b2030;
+  --panel-2: #232a3d;
+  --line: #343c55;
+  --text: #eef2ff;
+  --muted: #9aa6c3;
+  --accent: #f0b429;
+  --danger: #ef6b6b;
+  --ok: #5dcea3;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+h1,
+h2 {
+  margin: 0 0 0.6rem;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  min-width: 9rem;
+}
+
+.brand span,
+.muted,
+.empty-copy {
+  color: var(--muted);
+}
+
+.app-nav {
+  display: flex;
+  gap: 0.4rem;
+  flex: 1;
+}
+
+.app-nav button,
+.text-button,
+.betslip-header button,
+.betslip-leg button,
+.place-bet,
+.odds-button {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+
+.app-nav button.is-active,
+.place-bet {
+  background: var(--accent);
+  color: #1a1404;
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.header-wallet {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.header-wallet span:last-child {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.app-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-main {
+  padding: 1.25rem;
+  overflow: auto;
+}
+
+.betslip-panel {
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.betslip-header,
+.race-card,
+.runner-row,
+.history-row,
+.betslip-totals,
+.betslip-leg {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.race-list,
+.runner-list,
+.history-list,
+.betslip-legs,
+.wallet-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.race-card,
+.runner-row,
+.history-row,
+.betslip-leg,
+.wallet-hero {
+  width: 100%;
+  text-align: left;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.85rem;
+  margin-bottom: 0.6rem;
+  color: inherit;
+  cursor: pointer;
+}
+
+.race-card {
+  display: flex;
+}
+
+.race-card span,
+.history-row span,
+.betslip-leg-meta span {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.race-card-meta,
+.history-meta,
+.betslip-totals {
+  align-items: flex-end;
+  flex-direction: column;
+}
+
+.runner-row {
+  align-items: center;
+  cursor: default;
+}
+
+.silk {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 3px;
+  border: 1px solid #0006;
+  flex: 0 0 auto;
+}
+
+.runner-name {
+  flex: 1;
+}
+
+.odds-button {
+  min-width: 4.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.odds-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.countdown {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.winner-tag {
+  color: var(--ok);
+  font-size: 0.8rem;
+}
+
+.betslip-leg {
+  flex-wrap: wrap;
+  cursor: default;
+}
+
+.betslip-leg-meta {
+  flex: 1 1 100%;
+}
+
+.stake-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.stake-label input {
+  width: 7rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+}
+
+.warn-copy,
+.warn-inline {
+  color: var(--accent);
+}
+
+.error-copy {
+  color: var(--danger);
+  margin: 0;
+}
+
+.info-copy {
+  color: var(--ok);
+  margin: 0;
+}
+
+.place-bet {
+  width: 100%;
+  padding: 0.7rem;
+}
+
+.wallet-hero {
+  display: flex;
+  cursor: default;
+}
+
+.wallet-hero strong {
+  font-size: 1.6rem;
+}
+
+.text-button {
+  margin-bottom: 0.8rem;
+}
+
+@media (max-width: 860px) {
+  .app-body {
+    grid-template-columns: 1fr;
+  }
+
+  .betslip-panel {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
