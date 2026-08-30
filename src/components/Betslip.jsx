@@ -1,7 +1,10 @@
 import { formatOdds, formatPayout, formatWalletBalance } from '../utils/money.js'
+import { placeOdds } from '../utils/display.js'
 import { useAppStore } from '../store/useAppStore.js'
 
-export function Betslip() {
+const QUICK_STAKES = [10, 50, 100]
+
+export function Betslip({ mobileOpen, onClose }) {
   const legs = useAppStore((state) => state.legs)
   const races = useAppStore((state) => state.races)
   const payoutTotal = useAppStore((state) => state.payoutTotal)
@@ -16,18 +19,36 @@ export function Betslip() {
 
   const totalStake = legs.reduce((sum, leg) => sum + (Number(leg.stake) || 0), 0)
 
+  const addQuickStake = (index, amount) => {
+    const current = Number(legs[index]?.stake) || 0
+    setStake(index, String(current + amount))
+  }
+
   return (
-    <aside className="betslip-panel" data-testid="betslip-panel">
+    <aside
+      className={mobileOpen ? 'betslip-panel is-open' : 'betslip-panel'}
+      data-testid="betslip-panel"
+    >
       <div className="betslip-header">
-        <h2>Betslip</h2>
-        <button
-          type="button"
-          data-testid="betslip-clear-button"
-          onClick={clearSlip}
-          disabled={!legs.length}
-        >
-          Clear
-        </button>
+        <h2>Bet slip</h2>
+        <div className="betslip-header-actions">
+          <button
+            type="button"
+            data-testid="betslip-clear-button"
+            onClick={clearSlip}
+            disabled={!legs.length}
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            className="icon-button mobile-only"
+            data-testid="betslip-close"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
       </div>
 
       {!legs.length && (
@@ -39,16 +60,27 @@ export function Betslip() {
       <ul className="betslip-legs">
         {legs.map((leg, index) => {
           const race = races.find((item) => item.id === leg.raceId)
-          const liveOdds = race?.runners.find((item) => item.id === leg.runnerId)?.odds
+          const winOdds = race?.runners.find((item) => item.id === leg.runnerId)?.odds
+          const liveOdds =
+            winOdds == null
+              ? undefined
+              : leg.market === 'place'
+                ? placeOdds(winOdds)
+                : winOdds
           const locked = race && race.status !== 'upcoming'
+          const stake = Number(leg.stake) || 0
+          const linePayout = stake * (liveOdds ?? leg.oddsAtAdd)
           return (
             <li
-              key={`${leg.raceId}-${leg.runnerId}`}
+              key={`${leg.raceId}-${leg.runnerId}-${leg.market || 'win'}`}
               className="betslip-leg"
               data-testid={`betslip-leg-${index}`}
             >
               <div className="betslip-leg-meta">
-                <strong>{leg.runnerName}</strong>
+                <strong>
+                  {leg.runnerName}{' '}
+                  <span className="market-chip">{leg.market === 'place' ? 'Place' : 'Win'}</span>
+                </strong>
                 <span>{leg.raceName}</span>
                 <span>
                   Odds {formatOdds(leg.oddsAtAdd)}
@@ -73,6 +105,21 @@ export function Betslip() {
                   onChange={(event) => setStake(index, event.target.value)}
                 />
               </label>
+              <div className="quick-stakes">
+                {QUICK_STAKES.map((amount) => (
+                  <button
+                    key={amount}
+                    type="button"
+                    data-testid={`betslip-quick-stake-${index}-${amount}`}
+                    onClick={() => addQuickStake(index, amount)}
+                  >
+                    +{amount}
+                  </button>
+                ))}
+              </div>
+              <p className="leg-payout">
+                Returns {formatPayout(linePayout)}
+              </p>
               <button
                 type="button"
                 data-testid={`betslip-remove-leg-${index}`}

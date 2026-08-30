@@ -14,8 +14,8 @@ export function WalletView() {
     .reduce((sum, bet) => sum + (bet.settledPayout || 0), 0)
 
   return (
-    <section data-testid="wallet-view">
-      <h1>Wallet</h1>
+    <section className="panel-card" data-testid="wallet-view">
+      <h1>Account</h1>
       <p className="wallet-hero">
         <span>Available credits</span>
         <strong data-testid="wallet-balance-detail">
@@ -28,7 +28,8 @@ export function WalletView() {
         <li>Settled winnings {formatWalletBalance(won)}</li>
       </ul>
       <p className="muted">
-        Credits are simulated. Refreshing the page resets the wallet and card.
+        Simulated sportsbook. Deposit is display-only; refresh resets the wallet
+        and today&apos;s card.
       </p>
     </section>
   )

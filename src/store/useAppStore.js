@@ -8,6 +8,7 @@ import {
   subscribeToOdds,
 } from '../api/mockApi.js'
 import { formatPayout } from '../utils/money.js'
+import { placeOdds } from '../utils/display.js'
 
 function extractOddsMap(races) {
   const map = {}
@@ -22,13 +23,23 @@ function extractOddsMap(races) {
 function currentOddsForLeg(races, leg) {
   const race = races.find((item) => item.id === leg.raceId)
   const runner = race?.runners.find((item) => item.id === leg.runnerId)
-  return runner?.odds ?? leg.oddsAtAdd
+  const win = runner?.odds ?? leg.oddsAtAdd
+  if (leg.market === 'place') {
+    return placeOdds(win)
+  }
+  return win
 }
 
 function payoutFromOddsMap(legs, oddsMap, races) {
   return legs.reduce((sum, leg) => {
     const key = `${leg.raceId}:${leg.runnerId}`
-    const odds = oddsMap[key] ?? currentOddsForLeg(races, leg)
+    const mapped = oddsMap[key]
+    const odds =
+      mapped == null
+        ? currentOddsForLeg(races, leg)
+        : leg.market === 'place'
+          ? placeOdds(mapped)
+          : mapped
     const stake = Number(leg.stake) || 0
     return sum + stake * odds
   }, 0)
@@ -85,7 +96,7 @@ export const useAppStore = create((set, get) => ({
       infoMessage: '',
     }),
 
-  addLeg: (raceId, runnerId) => {
+  addLeg: (raceId, runnerId, market = 'win') => {
     const race = get().races.find((item) => item.id === raceId)
     if (!race) {
       return
@@ -100,13 +111,19 @@ export const useAppStore = create((set, get) => ({
     if (!runner) {
       return
     }
+    const marketType = market === 'place' ? 'place' : 'win'
     const exists = get().legs.some(
-      (leg) => leg.raceId === raceId && leg.runnerId === runnerId,
+      (leg) =>
+        leg.raceId === raceId &&
+        leg.runnerId === runnerId &&
+        (leg.market || 'win') === marketType,
     )
     if (exists) {
       set({ infoMessage: 'That runner is already on the betslip.' })
       return
     }
+    const oddsAtAdd =
+      marketType === 'place' ? placeOdds(runner.odds) : runner.odds
     const legs = [
       ...get().legs,
       {
@@ -114,7 +131,8 @@ export const useAppStore = create((set, get) => ({
         raceName: race.name,
         runnerId,
         runnerName: runner.name,
-        oddsAtAdd: runner.odds,
+        market: marketType,
+        oddsAtAdd,
         stake: '10',
       },
     ]

@@ -15,7 +15,7 @@ export function BetHistoryView() {
 
   return (
     <section>
-      <h1>Bet history</h1>
+      <h1>Results</h1>
       <ul className="history-list" data-testid="bet-history-list">
         {!bets.length && (
           <li className="empty-copy" data-testid="bet-history-empty">
@@ -39,7 +39,12 @@ export function BetHistoryView() {
               {bet.settledPayout != null && bet.status !== 'pending' && (
                 <span>Settled {formatPayout(bet.settledPayout)}</span>
               )}
-              <span data-testid={`bet-history-status-${bet.id}`}>{bet.status}</span>
+              <span
+                className={`status-chip status-${bet.status}`}
+                data-testid={`bet-history-status-${bet.id}`}
+              >
+                {bet.status}
+              </span>
             </div>
           </li>
         ))}

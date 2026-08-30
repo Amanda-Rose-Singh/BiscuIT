@@ -5,6 +5,13 @@ const TRACKS = [
   'Redstone Heath',
   'Willow Run',
   'Northcliff',
+  'Kenilworth',
+  'Turffontein',
+  'Greyville',
+  'Newmarket',
+  'Ascot',
+  'Flemington',
+  'Randwick',
 ]
 
 const RACE_NAMES = [
@@ -14,6 +21,13 @@ const RACE_NAMES = [
   'Twilight Cup',
   'Nursery Plate',
   'Feature Chase',
+  'Maiden Plate',
+  'Fillies Guineas',
+  'Progression Handicap',
+  'Metropolitan Mile',
+  'Night Cap',
+  'River Plate',
+  'Highveld Sprint',
 ]
 
 const HORSE_NAMES = [
@@ -41,6 +55,12 @@ const HORSE_NAMES = [
   'Willow King',
   'Yellow Finch',
   'Zephyr Note',
+  'Ashen Mare',
+  'Bold Current',
+  'Cedar Flame',
+  'Driftwood',
+  'Ember Trail',
+  'Frost Line',
 ]
 
 const SILKS = [
@@ -70,41 +90,110 @@ function randomOdds() {
   return Math.round(raw * 100) / 100
 }
 
-export function createSeedRaces(now = Date.now()) {
-  const horsePool = shuffle(HORSE_NAMES)
-  let horseIndex = 0
-  const countdownSeconds = [32, 48, 75, 95, 120, 165]
+function nudge(odds, amount) {
+  const next = Math.min(25, Math.max(1.1, odds + amount))
+  return Math.round(next * 100) / 100
+}
 
-  return RACE_NAMES.map((name, raceIndex) => {
-    const runnerCount = 6 + (raceIndex % 5)
-    const runners = Array.from({ length: runnerCount }, (_, runnerIndex) => {
-      const odds = randomOdds()
-      const runner = {
-        id: `r${raceIndex + 1}-${runnerIndex + 1}`,
-        name: horsePool[horseIndex % horsePool.length],
-        silkColor: SILKS[runnerIndex % SILKS.length],
-        odds,
-        oddsHistory: [odds],
-      }
-      horseIndex += 1
-      return runner
-    })
-
-    const secondsToPost = countdownSeconds[raceIndex]
-    const postTime = now + secondsToPost * 1000
-    const raceDurationMs = 10000 + Math.floor(Math.random() * 10000)
-
+function buildRunners(raceIndex, count, horsePool, horseIndex, withHistory) {
+  const runners = Array.from({ length: count }, (_, runnerIndex) => {
+    const opening = randomOdds()
+    const previous = nudge(opening, (Math.random() - 0.5) * 0.8)
+    const current = withHistory
+      ? nudge(previous, (Math.random() - 0.5) * 0.6)
+      : opening
     return {
+      id: `r${raceIndex + 1}-${runnerIndex + 1}`,
+      name: horsePool[(horseIndex + runnerIndex) % horsePool.length],
+      silkColor: SILKS[runnerIndex % SILKS.length],
+      odds: current,
+      oddsHistory: withHistory ? [opening, previous, current] : [opening],
+    }
+  })
+  return { runners, nextHorseIndex: horseIndex + count }
+}
+
+function buildRace({
+  raceIndex,
+  name,
+  trackName,
+  now,
+  status,
+  secondsFromNow,
+  raceDurationMs,
+  horsePool,
+  horseIndex,
+}) {
+  const runnerCount = 6 + (raceIndex % 5)
+  const { runners, nextHorseIndex } = buildRunners(
+    raceIndex,
+    runnerCount,
+    horsePool,
+    horseIndex,
+    status !== 'upcoming',
+  )
+
+  return {
+    race: {
       id: `race-${raceIndex + 1}`,
       name,
-      trackName: TRACKS[raceIndex],
-      status: 'upcoming',
-      postTime,
+      trackName,
+      status,
+      postTime: now + secondsFromNow * 1000,
       raceDurationMs,
       winnerId: null,
       runners,
-    }
+    },
+    nextHorseIndex,
+  }
+}
+
+export function createSeedRaces(now = Date.now()) {
+  const horsePool = shuffle(HORSE_NAMES)
+  let horseIndex = 0
+  const races = []
+
+  const upcomingOffsets = [42, 58, 74, 95, 118, 140, 165, 190, 220, 255]
+  upcomingOffsets.forEach((secondsToPost, index) => {
+    const { race, nextHorseIndex } = buildRace({
+      raceIndex: index,
+      name: RACE_NAMES[index],
+      trackName: TRACKS[index % TRACKS.length],
+      now,
+      status: 'upcoming',
+      secondsFromNow: secondsToPost,
+      raceDurationMs: 10000 + Math.floor(Math.random() * 10000),
+      horsePool,
+      horseIndex,
+    })
+    horseIndex = nextHorseIndex
+    races.push(race)
   })
+
+  const liveSpecs = [
+    { name: 'Kenilworth Dash', trackName: 'Kenilworth', elapsed: -28, remainingMs: 38000 },
+    { name: 'Turf Mile Live', trackName: 'Turffontein', elapsed: -45, remainingMs: 28000 },
+    { name: 'Greyville On Air', trackName: 'Greyville', elapsed: -18, remainingMs: 42000 },
+  ]
+
+  liveSpecs.forEach((spec, liveIndex) => {
+    const raceIndex = upcomingOffsets.length + liveIndex
+    const { race, nextHorseIndex } = buildRace({
+      raceIndex,
+      name: spec.name,
+      trackName: spec.trackName,
+      now,
+      status: 'in-progress',
+      secondsFromNow: spec.elapsed,
+      raceDurationMs: spec.remainingMs,
+      horsePool,
+      horseIndex,
+    })
+    horseIndex = nextHorseIndex
+    races.push(race)
+  })
+
+  return races
 }
 
 export const STARTING_BALANCE = 1000

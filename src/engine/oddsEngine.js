@@ -64,17 +64,7 @@ function scheduleMarketTick() {
   marketTimer = window.setTimeout(tickMarket, nextMarketDelay())
 }
 
-function lockRace(raceId) {
-  const race = getRacesSync().find((item) => item.id === raceId)
-  if (!race || race.status !== 'upcoming') {
-    return
-  }
-
-  updateRace(raceId, (current) => ({
-    ...current,
-    status: 'in-progress',
-  }))
-
+function scheduleRaceFinish(raceId, durationMs) {
   window.setTimeout(() => {
     updateRace(raceId, (current) => {
       if (current.status !== 'in-progress') {
@@ -88,7 +78,29 @@ function lockRace(raceId) {
       settleTimers.delete(raceId)
     }, 1200)
     settleTimers.set(raceId, closeTimer)
-  }, race.raceDurationMs)
+  }, durationMs)
+}
+
+function lockRace(raceId) {
+  const race = getRacesSync().find((item) => item.id === raceId)
+  if (!race || race.status !== 'upcoming') {
+    return
+  }
+
+  updateRace(raceId, (current) => ({
+    ...current,
+    status: 'in-progress',
+  }))
+
+  scheduleRaceFinish(raceId, race.raceDurationMs)
+}
+
+function resumeLiveRaces() {
+  getRacesSync().forEach((race) => {
+    if (race.status === 'in-progress') {
+      scheduleRaceFinish(race.id, race.raceDurationMs)
+    }
+  })
 }
 
 function settleRace(raceId) {
@@ -110,6 +122,7 @@ export function startOddsEngine() {
     return
   }
   scheduleMarketTick()
+  resumeLiveRaces()
 
   window.__ODDS_ENGINE__ = {
     getState: () => getStateSnapshot(),
