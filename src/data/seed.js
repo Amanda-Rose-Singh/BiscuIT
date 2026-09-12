@@ -28,6 +28,10 @@ const RACE_NAMES = [
   'Night Cap',
   'River Plate',
   'Highveld Sprint',
+  'Autumn Handicap',
+  'Ladies Purse',
+  'Stewards Cup',
+  'Sprint Trophy',
 ]
 
 const HORSE_NAMES = [
@@ -153,7 +157,10 @@ export function createSeedRaces(now = Date.now()) {
   let horseIndex = 0
   const races = []
 
-  const upcomingOffsets = [42, 58, 74, 95, 118, 140, 165, 190, 220, 255]
+  const upcomingOffsets = [
+    42, 58, 74, 95, 118, 140, 165, 190, 220, 255, 290, 325, 360, 400, 440, 485,
+    530,
+  ]
   upcomingOffsets.forEach((secondsToPost, index) => {
     const { race, nextHorseIndex } = buildRace({
       raceIndex: index,
@@ -196,4 +203,4 @@ export function createSeedRaces(now = Date.now()) {
   return races
 }
 
-export const STARTING_BALANCE = 1000
+export { STARTING_BALANCE } from '../constants.js'
