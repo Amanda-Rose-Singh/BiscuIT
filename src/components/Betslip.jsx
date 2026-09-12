@@ -1,3 +1,4 @@
+import { MAX_SINGLE_STAKE } from '../constants.js'
 import { formatOdds, formatPayout, formatWalletBalance } from '../utils/money.js'
 import { placeOdds } from '../utils/display.js'
 import { useAppStore } from '../store/useAppStore.js'
@@ -11,6 +12,7 @@ export function Betslip({ mobileOpen, onClose }) {
   const placing = useAppStore((state) => state.placing)
   const errorMessage = useAppStore((state) => state.errorMessage)
   const infoMessage = useAppStore((state) => state.infoMessage)
+  const stakeValidationError = useAppStore((state) => state.stakeValidationError)
   const oddsConfirmPending = useAppStore((state) => state.oddsConfirmPending)
   const setStake = useAppStore((state) => state.setStake)
   const removeLeg = useAppStore((state) => state.removeLeg)
@@ -36,7 +38,7 @@ export function Betslip({ mobileOpen, onClose }) {
             type="button"
             data-testid="betslip-clear-button"
             onClick={clearSlip}
-            disabled={!legs.length}
+            disabled={!legs.length || placing}
           >
             Clear
           </button>
@@ -95,13 +97,14 @@ export function Betslip({ mobileOpen, onClose }) {
                 )}
               </div>
               <label className="stake-label">
-                Stake
+                Stake (max {MAX_SINGLE_STAKE})
                 <input
                   data-testid={`betslip-stake-input-${index}`}
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  data-max-stake={MAX_SINGLE_STAKE}
+                  type="text"
+                  inputMode="decimal"
                   value={leg.stake}
+                  disabled={placing}
                   onChange={(event) => setStake(index, event.target.value)}
                 />
               </label>
@@ -112,6 +115,7 @@ export function Betslip({ mobileOpen, onClose }) {
                     type="button"
                     data-testid={`betslip-quick-stake-${index}-${amount}`}
                     onClick={() => addQuickStake(index, amount)}
+                    disabled={placing}
                   >
                     +{amount}
                   </button>
@@ -124,6 +128,7 @@ export function Betslip({ mobileOpen, onClose }) {
                 type="button"
                 data-testid={`betslip-remove-leg-${index}`}
                 onClick={() => removeLeg(index)}
+                disabled={placing}
               >
                 Remove
               </button>
@@ -131,6 +136,12 @@ export function Betslip({ mobileOpen, onClose }) {
           )
         })}
       </ul>
+
+      {stakeValidationError && (
+        <p className="error-copy" data-testid="stake-validation-error">
+          {stakeValidationError}
+        </p>
+      )}
 
       <div className="betslip-totals">
         <div>
@@ -166,6 +177,7 @@ export function Betslip({ mobileOpen, onClose }) {
         className="place-bet"
         data-testid="betslip-place-bet-button"
         onClick={placeBets}
+        disabled={placing || !legs.length}
       >
         {placing
           ? 'Placing…'

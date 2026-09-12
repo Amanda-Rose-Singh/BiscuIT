@@ -1,14 +1,20 @@
 import { create } from 'zustand'
 import {
-  applyWalletDebit,
+  adminSettle,
+  depositWallet,
   getBets,
   getRaces,
+  getTransactions,
   getWallet,
   placeBet,
+  playCasino,
   subscribeToOdds,
+  withdrawWallet,
 } from '../api/mockApi.js'
+import { MAX_SINGLE_STAKE } from '../constants.js'
 import { formatPayout } from '../utils/money.js'
 import { placeOdds } from '../utils/display.js'
+import { validateStakeAmount } from '../utils/stake.js'
 
 function extractOddsMap(races) {
   const map = {}
@@ -45,12 +51,30 @@ function payoutFromOddsMap(legs, oddsMap, races) {
   }, 0)
 }
 
+function firstStakeError(legs, walletBalance) {
+  for (const leg of legs) {
+    const result = validateStakeAmount(leg.stake, {
+      balance: walletBalance,
+      maxStake: MAX_SINGLE_STAKE,
+    })
+    if (!result.ok) {
+      return result.error
+    }
+  }
+  const totalStake = legs.reduce((sum, leg) => sum + Number(leg.stake), 0)
+  if (totalStake > walletBalance) {
+    return 'Insufficient funds for this betslip.'
+  }
+  return ''
+}
+
 export const useAppStore = create((set, get) => ({
   view: 'races',
   selectedRaceId: null,
   races: [],
   walletBalance: 0,
   bets: [],
+  transactions: [],
   legs: [],
   laggedOdds: {},
   payoutTotal: 0,
@@ -58,10 +82,12 @@ export const useAppStore = create((set, get) => ({
   placing: false,
   errorMessage: '',
   infoMessage: '',
+  stakeValidationError: '',
+  toastMessage: '',
   oddsConfirmPending: false,
 
   setView: (view) => set({ view, errorMessage: '', infoMessage: '' }),
-
+  dismissToast: () => set({ toastMessage: '' }),
   openRace: (raceId) => set({ view: 'race-detail', selectedRaceId: raceId }),
 
   setStake: (legIndex, stake) => {
@@ -71,7 +97,8 @@ export const useAppStore = create((set, get) => ({
     const payoutTotal = formatPayout(
       payoutFromOddsMap(legs, get().laggedOdds, get().races),
     )
-    set({ legs, payoutTotal, errorMessage: '' })
+    const stakeValidationError = firstStakeError(legs, get().walletBalance)
+    set({ legs, payoutTotal, errorMessage: '', stakeValidationError })
   },
 
   removeLeg: (legIndex) => {
@@ -84,6 +111,7 @@ export const useAppStore = create((set, get) => ({
       payoutTotal,
       oddsConfirmPending: false,
       errorMessage: '',
+      stakeValidationError: firstStakeError(legs, get().walletBalance),
     })
   },
 
@@ -94,6 +122,7 @@ export const useAppStore = create((set, get) => ({
       oddsConfirmPending: false,
       errorMessage: '',
       infoMessage: '',
+      stakeValidationError: '',
     }),
 
   addLeg: (raceId, runnerId, market = 'win') => {
@@ -145,18 +174,20 @@ export const useAppStore = create((set, get) => ({
       errorMessage: '',
       infoMessage: '',
       oddsConfirmPending: false,
+      stakeValidationError: firstStakeError(legs, get().walletBalance),
     })
   },
 
   hydrate: async () => {
     set({ loading: true, errorMessage: '' })
-    const [racesResult, walletResult, betsResult] = await Promise.all([
+    const [racesResult, walletResult, betsResult, txResult] = await Promise.all([
       getRaces(),
       getWallet(),
       getBets(),
+      getTransactions(),
     ])
     if (!racesResult.ok) {
-      set({ loading: false, errorMessage: racesResult.error })
+      set({ loading: false, errorMessage: racesResult.error, toastMessage: racesResult.error })
       return
     }
     set({
@@ -164,7 +195,21 @@ export const useAppStore = create((set, get) => ({
       races: racesResult.data,
       walletBalance: walletResult.ok ? walletResult.data.balance : 0,
       bets: betsResult.ok ? betsResult.data : [],
+      transactions: txResult.ok ? txResult.data : [],
       laggedOdds: extractOddsMap(racesResult.data),
+    })
+  },
+
+  refreshAccount: async () => {
+    const [walletResult, betsResult, txResult] = await Promise.all([
+      getWallet(),
+      getBets(),
+      getTransactions(),
+    ])
+    set({
+      walletBalance: walletResult.ok ? walletResult.data.balance : get().walletBalance,
+      bets: betsResult.ok ? betsResult.data : get().bets,
+      transactions: txResult.ok ? txResult.data : get().transactions,
     })
   },
 
@@ -177,9 +222,51 @@ export const useAppStore = create((set, get) => ({
       races: snapshot.races,
       walletBalance: snapshot.walletBalance,
       bets: snapshot.bets,
+      transactions: snapshot.transactions ?? get().transactions,
       laggedOdds: extractOddsMap(snapshot.races),
       payoutTotal,
     })
+  },
+
+  deposit: async (amount) => {
+    const result = await depositWallet(amount)
+    if (!result.ok) {
+      return result
+    }
+    await get().refreshAccount()
+    return result
+  },
+
+  withdraw: async (amount) => {
+    const result = await withdrawWallet(amount)
+    if (!result.ok) {
+      return result
+    }
+    await get().refreshAccount()
+    return result
+  },
+
+  settleAdmin: async (marketId, outcome) => {
+    const result = await adminSettle(marketId, outcome)
+    await get().hydrate()
+    return result
+  },
+
+  runCasino: async (payload) => {
+    set({ placing: true, toastMessage: '' })
+    const result = await playCasino(payload)
+    if (!result.ok) {
+      const toast = result.status === 500 ? result.error : ''
+      set({
+        placing: false,
+        toastMessage: toast,
+        errorMessage: toast ? '' : result.error,
+      })
+      return result
+    }
+    await get().refreshAccount()
+    set({ placing: false })
+    return result
   },
 
   placeBets: async () => {
@@ -189,12 +276,13 @@ export const useAppStore = create((set, get) => ({
       return
     }
 
+    const stakeError = firstStakeError(legs, walletBalance)
+    if (stakeError) {
+      set({ errorMessage: stakeError, stakeValidationError: stakeError })
+      return
+    }
+
     for (const leg of legs) {
-      const stake = Number(leg.stake)
-      if (!(stake > 0)) {
-        set({ errorMessage: 'Each stake must be greater than 0.' })
-        return
-      }
       const race = races.find((item) => item.id === leg.raceId)
       if (!race || race.status !== 'upcoming') {
         set({
@@ -202,12 +290,6 @@ export const useAppStore = create((set, get) => ({
         })
         return
       }
-    }
-
-    const totalStake = legs.reduce((sum, leg) => sum + Number(leg.stake), 0)
-    if (totalStake > walletBalance) {
-      set({ errorMessage: 'Insufficient funds for this betslip.' })
-      return
     }
 
     const oddsMoved = legs.some((leg) => {
@@ -222,11 +304,12 @@ export const useAppStore = create((set, get) => ({
       return
     }
 
-    set({ placing: true, errorMessage: '', infoMessage: '' })
+    set({ placing: true, errorMessage: '', infoMessage: '', toastMessage: '' })
 
     const remaining = []
     const succeeded = []
     let failureMessage = ''
+    let toastMessage = ''
 
     for (let index = 0; index < legs.length; index += 1) {
       const leg = legs[index]
@@ -236,47 +319,43 @@ export const useAppStore = create((set, get) => ({
         runnerId: leg.runnerId,
         stake: Number(leg.stake),
         odds: oddsMoved ? liveOdds : leg.oddsAtAdd,
+        market: leg.market,
       })
       if (result.ok) {
         succeeded.push(leg)
       } else {
         failureMessage = result.error
+        if (result.status === 500) {
+          toastMessage = result.error
+        }
         remaining.push(leg, ...legs.slice(index + 1))
         break
       }
     }
 
     if (failureMessage) {
-      const betsResult = await getBets()
+      await get().refreshAccount()
       set({
         placing: false,
         legs: remaining,
         payoutTotal: formatPayout(
           payoutFromOddsMap(remaining, get().laggedOdds, get().races),
         ),
-        bets: betsResult.ok ? betsResult.data : get().bets,
-        errorMessage: failureMessage,
+        errorMessage: toastMessage ? '' : failureMessage,
+        toastMessage,
         oddsConfirmPending: false,
       })
       return
     }
 
-    const debit = await applyWalletDebit(totalStake)
-    const betsResult = await getBets()
-    const walletResult = await getWallet()
-
+    await get().refreshAccount()
     set({
       placing: false,
       legs: [],
       payoutTotal: 0,
       oddsConfirmPending: false,
-      bets: betsResult.ok ? betsResult.data : get().bets,
-      walletBalance: debit.ok
-        ? debit.data.balance
-        : walletResult.ok
-          ? walletResult.data.balance
-          : get().walletBalance,
       infoMessage: succeeded.length > 1 ? 'Bets placed.' : 'Bet placed.',
+      stakeValidationError: '',
     })
   },
 }))
