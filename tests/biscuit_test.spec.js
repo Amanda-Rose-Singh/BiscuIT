@@ -1,10 +1,78 @@
 import { test, expect } from "@playwright/test";
 
+test("race list and race detail behave correctly", async ({ page }) => {
+  await page.goto("http://localhost:5173/BiscuIT/");
+  const firstRaceCard = page.locator('[data-testid^="race-card-"]').first();
+  await expect(firstRaceCard).toBeVisible();
+  await firstRaceCard.click();
+
+  await expect(page.locator('[data-testid^="race-detail"]')).toBeVisible();
+
+  const runnerRows = page.locator('[data-testid^="runner-row-"]');
+  await expect(runnerRows.first()).toBeVisible();
+  const runnerCount = await runnerRows.count();
+  expect(runnerCount).toBeGreaterThanOrEqual(6);
+  expect(runnerCount).toBeLessThanOrEqual(10);
+
+  const oddsTexts = await page
+    .locator('[data-testid^="odds-value-"]')
+    .allTextContents();
+  for (const odds of oddsTexts) {
+    expect(odds).toMatch(/^\d+\.\d{2}$/);
+  }
+});
+test("Betslip add / duplicate / remove / clear", async ({ page }) => {
+  await page.goto("http://localhost:5173/BiscuIT/");
+
+  await expect(page.getByTestId("races-list")).toBeVisible();
+
+  const odds = page.locator('[data-testid^="odds-value-"]');
+  await odds.nth(0).click();
+  await expect(page.getByTestId("races-list")).toBeVisible();
+
+  const availableOdds = page
+    .locator('[data-testid^="odds-value-"]')
+    .filter({ hasNot: page.locator(":disabled") });
+
+  await availableOdds.first().click();
+
+  await expect(page.getByTestId("betslip-leg-0")).toBeVisible();
+
+  await odds.nth(0).click();
+  await expect(page.getByTestId("betslip-info")).toContainText(
+    "already on the betslip",
+  );
+  await expect(page.getByTestId("betslip-leg-1")).toHaveCount(0);
+
+  await odds.nth(1).click();
+  await expect(page.getByTestId("betslip-leg-1")).toBeVisible();
+
+  await page.getByTestId("betslip-stake-input-0").fill("10");
+  await expect(page.getByTestId("betslip-total-stake")).toHaveText("20"); // 10 + default 10 on leg 1
+
+  await page.getByTestId("betslip-remove-leg-0").click();
+  await page.getByTestId("betslip-clear-button").click();
+  await expect(page.getByTestId("betslip-empty")).toBeVisible();
+});
+
 test("app loads and shows wallet balance", async ({ page }) => {
   await page.goto("http://localhost:5173/BiscuIT/");
   await expect(page.getByTestId("wallet-balance")).toBeVisible();
+  await expect(page.getByTestId("wallet-balance")).toHaveText("1035");
 });
-
+test("app loads and shows shell", async ({ page }) => {
+  await page.goto("http://localhost:5173/BiscuIT/");
+  await expect(page.getByTestId("app-header")).toBeVisible();
+});
+test("app loads and shows betslip-panel", async ({ page }) => {
+  await page.goto("http://localhost:5173/BiscuIT/");
+  await expect(page.getByTestId("betslip-panel")).toBeVisible();
+  await expect(page.getByTestId("betslip-empty")).toBeVisible();
+});
+test("app loads and shows nav-races", async ({ page }) => {
+  await page.goto("http://localhost:5173/BiscuIT/");
+  await expect(page.getByTestId("nav-races")).toBeVisible();
+});
 test("app loads and shows race list", async ({ page }) => {
   await page.goto("http://localhost:5173/BiscuIT/");
   await expect(page.getByTestId("races-list")).toBeVisible();
