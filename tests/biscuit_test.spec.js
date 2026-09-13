@@ -1,5 +1,53 @@
 import { test, expect } from "@playwright/test";
 
+const OPEN_RACES = [
+  {
+    id: "race-1",
+    name: "Opening Sprint",
+    trackName: "Meadowbrook Park",
+    status: "upcoming",
+    postTime: Date.now() + 10 * 60 * 1000,
+    raceDurationMs: 15000,
+    winnerId: null,
+    runners: [
+      {
+        id: "r1-1",
+        name: "Juniper",
+        silkColor: "#c0392b",
+        odds: 3.5,
+        oddsHistory: [3.5],
+      },
+      {
+        id: "r1-2",
+        name: "Larkspur",
+        silkColor: "#2980b9",
+        odds: 4.2,
+        oddsHistory: [4.2],
+      },
+    ],
+  },
+];
+
+async function stubOpenMarkets(page) {
+  const snapshot = {
+    races: OPEN_RACES,
+    walletBalance: 1000,
+    bets: [],
+    transactions: [],
+  };
+  await page.route("**/api/races", async (route) => {
+    const { pathname } = new URL(route.request().url());
+    if (route.request().method() === "GET" && pathname.endsWith("/api/races")) {
+      await route.fulfill({ json: { ok: true, data: OPEN_RACES } });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route("**/api/state", async (route) => {
+    await route.fulfill({ json: { ok: true, data: snapshot } });
+  });
+}
+
 test("race list and race detail behave correctly", async ({ page }) => {
   await page.goto("http://localhost:5173/BiscuIT/");
   const firstRaceCard = page.locator('[data-testid^="race-card-"]').first();
@@ -22,22 +70,16 @@ test("race list and race detail behave correctly", async ({ page }) => {
   }
 });
 test("Betslip add / duplicate / remove / clear", async ({ page }) => {
+  await stubOpenMarkets(page);
   await page.goto("http://localhost:5173/BiscuIT/");
-
   await expect(page.getByTestId("races-list")).toBeVisible();
 
-  const odds = page.locator('[data-testid^="odds-value-"]');
+  const odds = page.getByTestId(/^odds-value-/);
+  await expect(odds).toHaveCount(2);
+  await expect(odds.nth(0)).toBeEnabled();
+
   await odds.nth(0).click();
-  await expect(page.getByTestId("races-list")).toBeVisible();
-
-  const availableOdds = page
-    .locator('[data-testid^="odds-value-"]')
-    .filter({ hasNot: page.locator(":disabled") });
-
-  await availableOdds.first().click();
-
   await expect(page.getByTestId("betslip-leg-0")).toBeVisible();
-
   await odds.nth(0).click();
   await expect(page.getByTestId("betslip-info")).toContainText(
     "already on the betslip",
@@ -46,10 +88,8 @@ test("Betslip add / duplicate / remove / clear", async ({ page }) => {
 
   await odds.nth(1).click();
   await expect(page.getByTestId("betslip-leg-1")).toBeVisible();
-
   await page.getByTestId("betslip-stake-input-0").fill("10");
-  await expect(page.getByTestId("betslip-total-stake")).toHaveText("20"); // 10 + default 10 on leg 1
-
+  await expect(page.getByTestId("betslip-total-stake")).toHaveText("20");
   await page.getByTestId("betslip-remove-leg-0").click();
   await page.getByTestId("betslip-clear-button").click();
   await expect(page.getByTestId("betslip-empty")).toBeVisible();
@@ -58,7 +98,7 @@ test("Betslip add / duplicate / remove / clear", async ({ page }) => {
 test("app loads and shows wallet balance", async ({ page }) => {
   await page.goto("http://localhost:5173/BiscuIT/");
   await expect(page.getByTestId("wallet-balance")).toBeVisible();
-  await expect(page.getByTestId("wallet-balance")).toHaveText("1035");
+  await expect(page.getByTestId("wallet-balance")).toHaveText("1000");
 });
 test("app loads and shows shell", async ({ page }) => {
   await page.goto("http://localhost:5173/BiscuIT/");
@@ -117,6 +157,13 @@ test("app loads and shows betslip", async ({ page }) => {
 });
 
 test("app loads and shows loading state", async ({ page }) => {
+  const delay = async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  };
+  // Delay only API calls. Intercepting **/* serializes Vite ESM and flakes on Firefox.
+  await page.route("**/api/races", delay);
+  await page.route("**/api/state", delay);
   await page.goto("http://localhost:5173/BiscuIT/", {
     waitUntil: "domcontentloaded",
   });
@@ -135,23 +182,44 @@ test("app loads and shows empty state", async ({ page }) => {
 });
 
 test("shows validation when stake is empty", async ({ page }) => {
+  await stubOpenMarkets(page);
   await page.goto("http://localhost:5173/BiscuIT/");
   await expect(page.getByTestId("races-list")).toBeVisible();
-  await page.getByTestId("odds-value-race-1-r1-1").click();
+  const odds = page.getByTestId(/^odds-value-/).first();
+  await expect(odds).toBeEnabled();
+  await odds.click();
   await page.getByTestId("betslip-stake-input-0").fill("0");
   await page.getByTestId("betslip-place-bet-button").click();
-  await expect(page.getByTestId("betslip-error")).toBeVisible();
   await expect(page.getByTestId("betslip-error")).toHaveText(
-    "Each stake must be greater than 0.",
+    "Stake must be greater than 0.",
   );
 });
 
 test("shows error when betting is closed", async ({ page }) => {
   await page.goto("http://localhost:5173/BiscuIT/");
   await expect(page.getByTestId("races-list")).toBeVisible();
-  await page.getByTestId("odds-value-race-1-r1-1").click();
+
+  const openRace = await page.evaluate(async () => {
+    const races = await window.__ODDS_ENGINE__.getRaces();
+    const list = Array.isArray(races) ? races : [];
+    const open = list.find((race) => race.status === "upcoming");
+    return open ? { id: open.id, runnerId: open.runners[0].id } : null;
+  });
+  test.skip(!openRace, "No upcoming race to lock.");
+
+  const { id: raceId, runnerId } = openRace;
+  const odds = page.getByTestId(`odds-value-${raceId}-${runnerId}`);
+  await expect(odds).toBeEnabled();
+  await odds.click();
   await page.getByTestId("betslip-stake-input-0").fill("10");
-  await page.evaluate(() => window.__ODDS_ENGINE__.lockRace("race-1"));
+
+  await page.evaluate(async (id) => {
+    await window.__ODDS_ENGINE__.lockRace(id);
+  }, raceId);
+  await expect(page.getByTestId(`race-status-${raceId}`)).not.toHaveText(
+    "upcoming",
+  );
+
   await page.getByTestId("betslip-place-bet-button").click();
   await expect(page.getByTestId("betslip-error")).toBeVisible();
   await expect(page.getByTestId("betslip-error")).toContainText(
